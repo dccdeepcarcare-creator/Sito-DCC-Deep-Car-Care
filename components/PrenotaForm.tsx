@@ -134,17 +134,45 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
   const slots = selectedDay && duration > 0 ? freeSlots(selectedDay, duration, busy, new Date()) : [];
   const openDays = days.filter((d) => workingHours(d) !== null);
 
-  useEffect(() => {
+useEffect(() => {
+  let cancelled = false;
+
+  async function loadCalendar(attempt: number) {
     const from = new Date();
     const to = new Date();
     to.setDate(to.getDate() + DAYS_AHEAD + 1);
-    supabase
-      .rpc("get_busy_slots", { p_from: from.toISOString(), p_to: to.toISOString() })
-      .then(({ data, error }) => {
-        if (error) setCalendarError(true);
-        else setBusy((data ?? []) as BusyRow[]);
+
+    let data: BusyRow[] | null = null;
+    let failed = false;
+    try {
+      const res = await supabase.rpc("get_busy_slots", {
+        p_from: from.toISOString(),
+        p_to: to.toISOString(),
       });
-  }, []);
+      if (res.error) failed = true;
+      else data = (res.data ?? []) as BusyRow[];
+    } catch {
+      failed = true;
+    }
+    if (cancelled) return;
+
+    if (failed) {
+      if (attempt < 3) {
+        setTimeout(() => loadCalendar(attempt + 1), 1500 * attempt);
+      } else {
+        setCalendarError(true);
+      }
+    } else {
+      setCalendarError(false);
+      setBusy(data ?? []);
+    }
+  }
+
+  loadCalendar(1);
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
   function toggleAddon(id: string) {
     setAddonIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
