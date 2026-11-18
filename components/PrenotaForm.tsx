@@ -23,6 +23,11 @@ const DAYS_AHEAD = 21;
 const MAX_PHOTOS = 10;
 const MAX_PHOTO_MB = 10;
 
+// Add-on già compresi nel pacchetto: non vengono mostrati come extra
+const INCLUDED_ADDONS: Record<string, string[]> = {
+  "showroom-reborn": ["upgrade-lava-aspira"],
+};
+
 const input =
   "w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 outline-none focus:border-white/60";
 
@@ -102,7 +107,10 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
   const [done, setDone] = useState(false);
 
   const service = services.find((s) => s.id === serviceId);
-  const chosenAddons = addons.filter((a) => addonIds.includes(a.id));
+  const includedSlugs = INCLUDED_ADDONS[service?.slug ?? ""] ?? [];
+  const visibleAddons = addons.filter((a) => !includedSlugs.includes(a.slug));
+  const selectedAddonIds = addonIds.filter((id) => visibleAddons.some((a) => a.id === id));
+  const chosenAddons = visibleAddons.filter((a) => selectedAddonIds.includes(a.id));
   const duration =
     (service?.duration_min ?? 0) + chosenAddons.reduce((sum, a) => sum + a.duration_min, 0);
   const servicePrice = service?.prices[size];
@@ -111,6 +119,7 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
 
   const selectedDay = days.find((d) => toKey(d) === dayKey);
   const slots = selectedDay && duration > 0 ? freeSlots(selectedDay, duration, busy, new Date()) : [];
+  const openDays = days.filter((d) => workingHours(d) !== null);
 
   useEffect(() => {
     const from = new Date();
@@ -156,7 +165,7 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
       p_email: email,
       p_phone: phone,
       p_service_id: serviceId,
-      p_addon_ids: addonIds,
+      p_addon_ids: selectedAddonIds,
       p_starts_at: slot,
       p_payment_method: "on_site",
       p_vehicle_brand: brand,
@@ -174,7 +183,7 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
 
     let photoErrors = 0;
     for (let i = 0; i < files.length; i++) {
-  const file = files[i];
+      const file = files[i];
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const path = `${bookingId}/${Date.now()}-${i}-${safeName}`;
       const up = await supabase.storage
@@ -265,14 +274,14 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
           </select>
         </label>
 
-        {addons.length > 0 && (
+        {visibleAddons.length > 0 && (
           <div className="space-y-2">
             <span className="text-sm text-white/70">Extra (facoltativi)</span>
-            {addons.map((a) => (
+            {visibleAddons.map((a) => (
               <label key={a.id} className="flex items-center gap-3 rounded-lg border border-white/10 p-3">
                 <input
                   type="checkbox"
-                  checked={addonIds.includes(a.id)}
+                  checked={selectedAddonIds.includes(a.id)}
                   onChange={() => toggleAddon(a.id)}
                 />
                 <span className="flex-1">{a.name}</span>
@@ -290,13 +299,11 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
           </p>
           <p>
             Prezzo indicativo:{" "}
-            <strong>
-              {servicePrice ? formatEuro(estimate) : "su preventivo"}
-            </strong>
+            <strong>{servicePrice ? formatEuro(estimate) : "su preventivo"}</strong>
           </p>
           <p className="mt-2 text-white/60">
-            La trasferta (oltre 15 km) e l&apos;eventuale sovrapprezzo per lo stato dell&apos;auto
-            vengono confermati da noi prima dell&apos;appuntamento.
+            Eventuale trasferta fuori zona e sovrapprezzo per lo stato dell&apos;auto vengono
+            confermati da noi prima dell&apos;appuntamento.
           </p>
         </div>
       </section>
@@ -304,57 +311,84 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
       {/* 3. Data e orario */}
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">3. Data e orario</h2>
-        <p className="text-sm text-white/60">Lun-Ven 8:00-18:00, Sab 14:00-18:00. Domenica chiuso.</p>
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {days.map((d) => {
-            const key = toKey(d);
-            const open = workingHours(d) !== null;
-            return (
+
+        {!dayKey ? (
+          <>
+            <p className="text-sm text-white/60">
+              Lun-Ven 8:00-18:00, Sab 14:00-18:00. Domenica chiuso. Scegli un giorno.
+            </p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {openDays.map((d) => {
+                const key = toKey(d);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      setDayKey(key);
+                      setSlot("");
+                    }}
+                    className="rounded-lg border border-white/15 px-2 py-3 text-sm hover:border-white/60"
+                  >
+                    {d.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" })}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="font-semibold capitalize">
+                {selectedDay?.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}
+              </p>
               <button
-                key={key}
                 type="button"
-                disabled={!open}
                 onClick={() => {
-                  setDayKey(key);
+                  setDayKey("");
                   setSlot("");
                 }}
-                className={`rounded-lg border px-2 py-2 text-sm disabled:opacity-30 ${
-                  dayKey === key ? "border-white bg-white/10" : "border-white/15"
-                }`}
+                className="text-sm text-white/70 underline"
               >
-                {d.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" })}
+                Cambia data
               </button>
-            );
-          })}
-        </div>
+            </div>
 
-        {dayKey && (
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-            {slots.length === 0 && (
-              <p className="col-span-full text-white/60">Nessun orario libero per questo giorno.</p>
+            {duration === 0 ? (
+              <p className="text-white/60">Scegli prima un servizio.</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {slots.length === 0 && (
+                  <p className="col-span-full text-white/60">Nessun orario libero per questo giorno.</p>
+                )}
+                {slots.map((s) => {
+                  const iso = s.toISOString();
+                  return (
+                    <button
+                      key={iso}
+                      type="button"
+                      onClick={() => setSlot(iso)}
+                      className={`rounded-lg border px-2 py-2 text-sm ${
+                        slot === iso ? "border-white bg-white/10" : "border-white/15"
+                      }`}
+                    >
+                      {s.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                    </button>
+                  );
+                })}
+              </div>
             )}
-            {slots.map((s) => {
-              const iso = s.toISOString();
-              return (
-                <button
-                  key={iso}
-                  type="button"
-                  onClick={() => setSlot(iso)}
-                  className={`rounded-lg border px-2 py-2 text-sm ${
-                    slot === iso ? "border-white bg-white/10" : "border-white/15"
-                  }`}
-                >
-                  {s.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
-                </button>
-              );
-            })}
-          </div>
+          </>
         )}
       </section>
 
       {/* 4. Dati */}
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">4. I tuoi dati</h2>
+        <p className="text-sm text-white/60">
+          Il servizio a domicilio è a Cesena, Forlì e Ravenna, entro 15 km dalla città più vicina.
+          Fuori da quest&apos;area la trasferta viene confermata da noi prima dell&apos;appuntamento.
+        </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <input required placeholder="Nome e cognome" value={fullName} onChange={(e) => setFullName(e.target.value)} className={input} />
           <input required type="tel" placeholder="Telefono" value={phone} onChange={(e) => setPhone(e.target.value)} className={input} />
