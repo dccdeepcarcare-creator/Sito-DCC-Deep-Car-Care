@@ -448,4 +448,44 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
           <input required placeholder="Marca auto" value={brand} onChange={(e) => setBrand(e.target.value)} className={input} />
           <input required placeholder="Modello auto" value={model} onChange={(e) => setModel(e.target.value)} className={input} />
           <input required placeholder="Indirizzo del servizio a domicilio (via, numero, città)" value={address} onChange={(e) => setAddress(e.target.value)} className={`${input} sm:col-span-2`} />
-          <textarea placeholder="Note (facolt
+          <textarea placeholder="Note (facoltative)" value={notes} onChange={(e) => setNotes(e.target.value)} className={`${input} sm:col-span-2`} rows={3} />
+        </div>
+      </section>
+
+      {/* 5. Foto */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold">5. Foto degli interni (consigliate)</h2>
+        <p className="text-sm text-white/60">
+          Fino a {MAX_PHOTOS} foto, ciascuna max {MAX_PHOTO_MB} MB. Servono per valutare lo stato
+          dell&apos;auto e il prezzo definitivo.
+        </p>
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => onFiles(e.target.files)}
+          className="block w-full text-sm text-white/70"
+        />
+        {files.length > 0 && <p className="text-sm text-white/60">{files.length} foto selezionate</p>}
+      </section>
+
+      {calendarError && (
+        <p className="text-amber-300">
+          Il calendario non è disponibile in questo momento. Riprova tra poco o contattaci su WhatsApp.
+        </p>
+      )}
+      {error && <p className="text-amber-300">{error}</p>}
+
+      <button
+        type="submit"
+        disabled={loading || calendarError}
+        className="w-full rounded-full bg-white px-6 py-3 font-semibold text-black disabled:opacity-50"
+      >
+        {loading ? "Invio in corso…" : "Invia richiesta"}
+      </button>
+      <p className="text-center text-sm text-white/50">
+        Nessun pagamento ora. Confermiamo la richiesta e ti indichiamo l&apos;acconto da versare.
+      </p>
+    </form>
+  );
+}
