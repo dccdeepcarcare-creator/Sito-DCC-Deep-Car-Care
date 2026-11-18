@@ -53,6 +53,8 @@ function workingHours(d: Date): [number, number] | null {
   return [8, 18];
 }
 
+type BusyRow = { starts_at: string; ends_at: string };
+
 function freeSlots(day: Date, durationMin: number, busy: Busy[], now: Date): Date[] {
   const hours = workingHours(day);
   if (!hours) return [];
@@ -104,6 +106,7 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
   const [dayKey, setDayKey] = useState("");
   const [slot, setSlot] = useState("");
   const [busy, setBusy] = useState<Busy[]>([]);
+  const [calendarError, setCalendarError] = useState(false);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -113,7 +116,7 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
-  const [calendarError, setCalendarError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
   const service = services.find((s) => s.id === serviceId);
@@ -139,7 +142,7 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
       .rpc("get_busy_slots", { p_from: from.toISOString(), p_to: to.toISOString() })
       .then(({ data, error }) => {
         if (error) setCalendarError(true);
-        else setBusy((data ?? []) as Busy[]);
+        else setBusy((data ?? []) as BusyRow[]);
       });
   }, []);
 
@@ -164,18 +167,20 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (calendarError) return;
+    if (!serviceId || !slot) {
       setError("Scegli il servizio e un orario libero.");
       return;
     }
     if (!isValidEmail(email)) {
-  setError("Controlla l'email: sembra non corretta.");
-  return;
-}
-if (!isValidPhone(phone)) {
-  setError("Controlla il numero di telefono: serve un cellulare o un fisso italiano.");
-  return;
-}
-setLoading(true);
+      setError("Controlla l'email: sembra non corretta.");
+      return;
+    }
+    if (!isValidPhone(phone)) {
+      setError("Controlla il numero di telefono: serve un cellulare o un fisso italiano.");
+      return;
+    }
+
+    setLoading(true);
     setError(null);
 
     const { data: bookingId, error: bookingError } = await supabase.rpc("create_guest_booking", {
@@ -224,6 +229,35 @@ setLoading(true);
         `Richiesta inviata, ma ${photoErrors} foto non sono state caricate. Puoi mandarle a noi via email o WhatsApp.`
       );
     }
+
+    const chosen = addons.filter((a) => selectedAddonIds.includes(a.id));
+    fetch("/api/notifica", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nome: fullName,
+        email,
+        telefono: phone,
+        marca: brand,
+        modello: model,
+        indirizzo: address,
+        servizio: service?.name ?? "",
+        categoria: VEHICLE_SIZES.find((v) => v.value === size)?.label ?? size,
+        extra: chosen.map((a) => a.name),
+        durataMin: duration,
+        prezzo: servicePrice ? formatEuro(estimate) : "su preventivo",
+        dataOra: new Date(slot).toLocaleString("it-IT", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        note: notes,
+        foto: files.length,
+      }),
+    }).catch(() => undefined);
+
     setDone(true);
   }
 
@@ -232,9 +266,9 @@ setLoading(true);
       <div className="rounded-2xl border border-white/10 p-8">
         <h2 className="text-2xl font-semibold">Richiesta inviata</h2>
         <p className="mt-3 text-white/70">
-  Grazie, abbiamo ricevuto la tua richiesta. Il nostro team ti contatterà al più presto
-  via WhatsApp, email o telefono per confermare l&apos;appuntamento e il prezzo definitivo.
-</p>
+          Grazie, abbiamo ricevuto la tua richiesta. Il nostro team ti contatterà al più presto
+          via WhatsApp, email o telefono per confermare l&apos;appuntamento e il prezzo definitivo.
+        </p>
         {error && <p className="mt-4 text-amber-300">{error}</p>}
       </div>
     );
@@ -414,44 +448,4 @@ setLoading(true);
           <input required placeholder="Marca auto" value={brand} onChange={(e) => setBrand(e.target.value)} className={input} />
           <input required placeholder="Modello auto" value={model} onChange={(e) => setModel(e.target.value)} className={input} />
           <input required placeholder="Indirizzo del servizio a domicilio (via, numero, città)" value={address} onChange={(e) => setAddress(e.target.value)} className={`${input} sm:col-span-2`} />
-          <textarea placeholder="Note (facoltative)" value={notes} onChange={(e) => setNotes(e.target.value)} className={`${input} sm:col-span-2`} rows={3} />
-        </div>
-      </section>
-
-      {/* 5. Foto */}
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold">5. Foto degli interni (consigliate)</h2>
-        <p className="text-sm text-white/60">
-          Fino a {MAX_PHOTOS} foto, ciascuna max {MAX_PHOTO_MB} MB. Servono per valutare lo stato
-          dell&apos;auto e il prezzo definitivo.
-        </p>
-        <input
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={(e) => onFiles(e.target.files)}
-          className="block w-full text-sm text-white/70"
-        />
-        {files.length > 0 && <p className="text-sm text-white/60">{files.length} foto selezionate</p>}
-      </section>
-
-      {calendarError && (
-  <p className="text-amber-300">
-    Il calendario non è disponibile in questo momento. Riprova tra poco o contattaci su WhatsApp.
-  </p>
-)}
-{error && <p className="text-amber-300">{error}</p>}
-
-      <button
-        type="submit"
-        disabled={loading || calendarError}
-        className="w-full rounded-full bg-white px-6 py-3 font-semibold text-black disabled:opacity-50"
-      >
-        {loading ? "Invio in corso…" : "Invia richiesta"}
-      </button>
-      <p className="text-center text-sm text-white/50">
-        Nessun pagamento ora. Confermiamo la richiesta e ti indichiamo l&apos;acconto da versare.
-      </p>
-    </form>
-  );
-}
+          <textarea placeholder="Note (facolt
