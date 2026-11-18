@@ -205,7 +205,7 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
         <h2 className="text-2xl font-semibold">Richiesta inviata</h2>
         <p className="mt-3 text-white/70">
           Abbiamo ricevuto la tua richiesta. Ti confermeremo appuntamento e prezzo
-          definitivo dopo aver verificato le foto dell'auto.
+          definitivo dopo aver verificato le foto dell&apos;auto.
         </p>
         {error && <p className="mt-4 text-amber-300">{error}</p>}
       </div>
@@ -294,8 +294,8 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
             </strong>
           </p>
           <p className="mt-2 text-white/60">
-            La trasferta (oltre 15 km) e l'eventuale sovrapprezzo per lo stato dell'auto
-            vengono confermati da noi prima dell'appuntamento.
+            La trasferta (oltre 15 km) e l&apos;eventuale sovrapprezzo per lo stato dell&apos;auto
+            vengono confermati da noi prima dell&apos;appuntamento.
           </p>
         </div>
       </section>
@@ -370,7 +370,7 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
         <h2 className="text-xl font-semibold">5. Foto degli interni (consigliate)</h2>
         <p className="text-sm text-white/60">
           Fino a {MAX_PHOTOS} foto, ciascuna max {MAX_PHOTO_MB} MB. Servono per valutare lo stato
-          dell'auto e il prezzo definitivo.
+          dell&apos;auto e il prezzo definitivo.
         </p>
         <input
           type="file"
@@ -392,7 +392,7 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
         {loading ? "Invio in corso…" : "Invia richiesta"}
       </button>
       <p className="text-center text-sm text-white/50">
-        Nessun pagamento ora. Confermiamo la richiesta e ti indichiamo l'acconto da versare.
+        Nessun pagamento ora. Confermiamo la richiesta e ti indichiamo l&apos;acconto da versare.
       </p>
     </form>
   );
