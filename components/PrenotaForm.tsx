@@ -9,7 +9,7 @@ import {
   type Addon,
   type Service,
   type VehicleSize,
-} from '../lib/catalog';
+} from "../lib/catalog";
 
 type Busy = { starts_at: string; ends_at: string };
 type Props = {
