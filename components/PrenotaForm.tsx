@@ -35,6 +35,16 @@ function toKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim());
+}
+
+// Accetta cellulari italiani (3xx...) e fissi (0...), con o senza +39
+function isValidPhone(value: string) {
+  const digits = value.replace(/[\s.\-()]/g, "").replace(/^(\+39|0039)/, "");
+  return /^(3\d{8,9}|0\d{5,10})$/.test(digits);
+}
+
 // Lun-Ven 8-18, Sab 14-18, Dom chiuso
 function workingHours(d: Date): [number, number] | null {
   const day = d.getDay();
@@ -157,7 +167,15 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
       setError("Scegli il servizio e un orario libero.");
       return;
     }
-    setLoading(true);
+    if (!isValidEmail(email)) {
+  setError("Controlla l'email: sembra non corretta.");
+  return;
+}
+if (!isValidPhone(phone)) {
+  setError("Controlla il numero di telefono: serve un cellulare o un fisso italiano.");
+  return;
+}
+setLoading(true);
     setError(null);
 
     const { data: bookingId, error: bookingError } = await supabase.rpc("create_guest_booking", {
@@ -214,9 +232,9 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
       <div className="rounded-2xl border border-white/10 p-8">
         <h2 className="text-2xl font-semibold">Richiesta inviata</h2>
         <p className="mt-3 text-white/70">
-          Abbiamo ricevuto la tua richiesta. Ti confermeremo appuntamento e prezzo
-          definitivo dopo aver verificato le foto dell&apos;auto.
-        </p>
+  Grazie, abbiamo ricevuto la tua richiesta. Il nostro team ti contatterà al più presto
+  via WhatsApp, email o telefono per confermare l&apos;appuntamento e il prezzo definitivo.
+</p>
         {error && <p className="mt-4 text-amber-300">{error}</p>}
       </div>
     );
