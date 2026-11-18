@@ -173,7 +173,8 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
     }
 
     let photoErrors = 0;
-    for (const [i, file] of files.entries()) {
+    ffor (let i = 0; i < files.length; i++) {
+  const file = files[i];
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const path = `${bookingId}/${Date.now()}-${i}-${safeName}`;
       const up = await supabase.storage
