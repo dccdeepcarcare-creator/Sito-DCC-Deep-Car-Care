@@ -113,7 +113,7 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [calendarError, setCalendarError] = useState(false);
   const [done, setDone] = useState(false);
 
   const service = services.find((s) => s.id === serviceId);
@@ -138,7 +138,7 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
     supabase
       .rpc("get_busy_slots", { p_from: from.toISOString(), p_to: to.toISOString() })
       .then(({ data, error }) => {
-        if (error) setError("Non riesco a caricare il calendario. Ricarica la pagina.");
+        if (error) setCalendarError(true);
         else setBusy((data ?? []) as Busy[]);
       });
   }, []);
@@ -163,7 +163,7 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!serviceId || !slot) {
+    if (calendarError) return;
       setError("Scegli il servizio e un orario libero.");
       return;
     }
@@ -435,11 +435,16 @@ setLoading(true);
         {files.length > 0 && <p className="text-sm text-white/60">{files.length} foto selezionate</p>}
       </section>
 
-      {error && <p className="text-amber-300">{error}</p>}
+      {calendarError && (
+  <p className="text-amber-300">
+    Il calendario non è disponibile in questo momento. Riprova tra poco o contattaci su WhatsApp.
+  </p>
+)}
+{error && <p className="text-amber-300">{error}</p>}
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || calendarError}
         className="w-full rounded-full bg-white px-6 py-3 font-semibold text-black disabled:opacity-50"
       >
         {loading ? "Invio in corso…" : "Invia richiesta"}
