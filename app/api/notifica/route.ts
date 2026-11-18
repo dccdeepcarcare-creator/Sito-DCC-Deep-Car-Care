@@ -38,6 +38,13 @@ export async function POST(req: Request) {
   const ownerPhone = process.env.OWNER_WHATSAPP;
   const callmebotKey = process.env.CALLMEBOT_APIKEY;
 
+  console.log("[notifica] variabili presenti:", {
+    gmailUser: Boolean(gmailUser),
+    gmailPass: Boolean(gmailPass),
+    ownerPhone: Boolean(ownerPhone),
+    callmebotKey: Boolean(callmebotKey),
+  });
+
   const riepilogo = [
     line("Servizio", p.servizio),
     line("Categoria auto", p.categoria),
@@ -56,7 +63,6 @@ export async function POST(req: Request) {
 
   const warnings: string[] = [];
 
-  // Email di riepilogo al cliente, con copia nascosta alla tua Gmail
   if (gmailUser && gmailPass) {
     try {
       const transporter = nodemailer.createTransport({
@@ -70,14 +76,16 @@ export async function POST(req: Request) {
         subject: "Richiesta ricevuta - DCC Deep Car Care",
         text: `Ciao ${p.nome},\n\nabbiamo ricevuto la tua richiesta. Ecco il riepilogo:\n\n${riepilogo}\n\nIl nostro team ti contatterà al più presto via WhatsApp, email o telefono per confermare l'appuntamento e il prezzo definitivo.\n\nDCC Deep Car Care`,
       });
-    } catch {
+      console.log("[notifica] email inviata a", p.email);
+    } catch (err) {
+      console.error("[notifica] ERRORE EMAIL:", err);
       warnings.push("email");
     }
   } else {
+    console.error("[notifica] ERRORE: mancano GMAIL_USER o GMAIL_APP_PASSWORD");
     warnings.push("email-config");
   }
 
-  // WhatsApp di notifica a te (CallMeBot)
   if (ownerPhone && callmebotKey) {
     try {
       const text = encodeURIComponent(
@@ -86,11 +94,15 @@ export async function POST(req: Request) {
       const res = await fetch(
         `https://api.callmebot.com/whatsapp.php?phone=${ownerPhone}&text=${text}&apikey=${callmebotKey}`
       );
+      const body = await res.text();
+      console.log("[notifica] risposta CallMeBot:", res.status, body);
       if (!res.ok) warnings.push("whatsapp");
-    } catch {
+    } catch (err) {
+      console.error("[notifica] ERRORE WHATSAPP:", err);
       warnings.push("whatsapp");
     }
   } else {
+    console.error("[notifica] ERRORE: mancano OWNER_WHATSAPP o CALLMEBOT_APIKEY");
     warnings.push("whatsapp-config");
   }
 
