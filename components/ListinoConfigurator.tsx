@@ -1,17 +1,21 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Clock } from "lucide-react";
-import {
-  VEHICLE_SIZES,
-  formatDuration,
-  formatEuro,
-} from "@/lib/catalog";
+import { VEHICLE_SIZES, formatDuration, formatEuro } from "@/lib/catalog";
 import type { Addon, PriceInfo, Service, VehicleSize } from "@/lib/catalog";
 
-type Props = { services: Service[]; addons: Addon[] };
+type Props = {
+  services: Service[];
+  addons: Addon[];
+  size: VehicleSize;
+  onSizeChange: (v: VehicleSize) => void;
+  serviceId: string;
+  onServiceChange: (id: string) => void;
+  selectedIds: string[];
+  onToggleAddon: (id: string) => void;
+};
 
 const cardBase =
   "relative flex cursor-pointer flex-col rounded-lg border p-5 transition-colors focus-within:ring-2 focus-within:ring-ghiaccio";
@@ -23,28 +27,27 @@ function priceText(p?: PriceInfo) {
   return p ? `${p.from ? "da " : ""}${formatEuro(p.cents)}` : "Su richiesta";
 }
 
-export function ListinoConfigurator({ services, addons }: Props) {
-  const [size, setSize] = useState<VehicleSize>("sedan");
-  const [serviceId, setServiceId] = useState<string>(
-    (services.find((s) => s.is_featured) ?? services[0]).id
-  );
-  const [selected, setSelected] = useState<string[]>([]);
-
+export function ListinoConfigurator({
+  services,
+  addons,
+  size,
+  onSizeChange,
+  serviceId,
+  onServiceChange,
+  selectedIds,
+  onToggleAddon,
+}: Props) {
   const service = services.find((s) => s.id === serviceId) ?? services[0];
   const servicePrice = service.prices[size];
 
-  const toggleAddon = (id: string) =>
-    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-
-  const chosenAddons = useMemo(() => addons.filter((a) => selected.includes(a.id)), [addons, selected]);
+  const chosenAddons = useMemo(
+    () => addons.filter((a) => selectedIds.includes(a.id)),
+    [addons, selectedIds]
+  );
   const addonsCents = chosenAddons.reduce((sum, a) => sum + a.price_cents, 0);
   const totalCents = (servicePrice?.cents ?? 0) + addonsCents;
   const totalMin = service.duration_min + chosenAddons.reduce((sum, a) => sum + a.duration_min, 0);
   const sizeLabel = VEHICLE_SIZES.find((v) => v.value === size)?.label ?? "";
-
-  const bookingHref = `/prenota?servizio=${service.slug}&categoria=${size}${
-    chosenAddons.length ? `&addon=${chosenAddons.map((a) => a.slug).join(",")}` : ""
-  }`;
 
   return (
     <div className="mt-14 grid gap-10 lg:grid-cols-[1fr_380px]">
@@ -61,7 +64,7 @@ export function ListinoConfigurator({ services, addons }: Props) {
                     name="categoria"
                     value={v.value}
                     checked={on}
-                    onChange={() => setSize(v.value)}
+                    onChange={() => onSizeChange(v.value)}
                     className="sr-only"
                   />
                   <span className="font-semibold text-testo">{v.label}</span>
@@ -85,7 +88,7 @@ export function ListinoConfigurator({ services, addons }: Props) {
                     name="servizio"
                     value={s.id}
                     checked={active}
-                    onChange={() => setServiceId(s.id)}
+                    onChange={() => onServiceChange(s.id)}
                     className="sr-only"
                   />
                   {s.is_featured && (
@@ -120,7 +123,7 @@ export function ListinoConfigurator({ services, addons }: Props) {
             <legend className={legendClass}>3. Add-on</legend>
             <div className="mt-5 grid gap-3">
               {addons.map((a) => {
-                const on = selected.includes(a.id);
+                const on = selectedIds.includes(a.id);
                 return (
                   <label
                     key={a.id}
@@ -131,7 +134,7 @@ export function ListinoConfigurator({ services, addons }: Props) {
                     <input
                       type="checkbox"
                       checked={on}
-                      onChange={() => toggleAddon(a.id)}
+                      onChange={() => onToggleAddon(a.id)}
                       className="sr-only"
                     />
                     <span
@@ -210,18 +213,18 @@ export function ListinoConfigurator({ services, addons }: Props) {
           )}
 
           {servicePrice ? (
-            <Link
-              href={bookingHref}
+            <a
+              href="#prenota"
               className="mt-6 flex w-full items-center justify-center rounded-md bg-oro px-6 py-3.5 font-semibold text-carbon shadow-glow transition-colors hover:bg-oro-light"
             >
-              Prenota questa configurazione
-            </Link>
+              Scegli data e orario
+            </a>
           ) : (
             <p className="mt-6 rounded-md border border-testo/15 px-6 py-3.5 text-center text-sm text-testo/60">
               Per questa categoria scrivici per un preventivo.
             </p>
           )}
-          <p className="mt-3 text-center text-xs text-testo/50">Servizio a domicilio a Ravenna e provincia.</p>
+          <p className="mt-3 text-center text-xs text-testo/50">Servizio a domicilio a Cesena, Forlì e Ravenna.</p>
         </div>
       </aside>
     </div>

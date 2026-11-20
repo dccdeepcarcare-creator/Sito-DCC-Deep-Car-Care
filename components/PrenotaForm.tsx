@@ -12,21 +12,20 @@ import {
 } from "../lib/catalog";
 
 type Busy = { starts_at: string; ends_at: string };
+type BusyRow = Busy;
+
 type Props = {
   services: Service[];
   addons: Addon[];
-  initial: { servizio?: string; categoria?: string; addon?: string };
+  serviceId: string;
+  size: VehicleSize;
+  addonIds: string[];
 };
 
 const SLOT_STEP_MIN = 30;
 const DAYS_AHEAD = 21;
 const MAX_PHOTOS = 10;
 const MAX_PHOTO_MB = 10;
-
-// Add-on già compresi nel pacchetto: non vengono mostrati come extra
-const INCLUDED_ADDONS: Record<string, string[]> = {
-  "showroom-reborn": ["upgrade-lava-aspira"],
-};
 
 const input =
   "w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 outline-none focus:border-white/60";
@@ -53,8 +52,6 @@ function workingHours(d: Date): [number, number] | null {
   return [8, 18];
 }
 
-type BusyRow = { starts_at: string; ends_at: string };
-
 function freeSlots(day: Date, durationMin: number, busy: Busy[], now: Date): Date[] {
   const hours = workingHours(day);
   if (!hours) return [];
@@ -80,15 +77,7 @@ function freeSlots(day: Date, durationMin: number, busy: Busy[], now: Date): Dat
   return slots;
 }
 
-export default function PrenotaForm({ services, addons, initial }: Props) {
-  const initialService = services.find((s) => s.slug === initial.servizio) ?? services[0];
-  const initialSize: VehicleSize =
-    VEHICLE_SIZES.find((v) => v.value === initial.categoria)?.value ?? "sedan";
-  const initialAddonIds = (initial.addon ?? "")
-    .split(",")
-    .map((slug) => addons.find((a) => a.slug === slug.trim())?.id)
-    .filter((id): id is string => Boolean(id));
-
+export default function PrenotaForm({ services, addons, serviceId, size, addonIds }: Props) {
   const days = useMemo(() => {
     const list: Date[] = [];
     for (let i = 0; i < DAYS_AHEAD; i++) {
@@ -100,9 +89,6 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
     return list;
   }, []);
 
-  const [serviceId, setServiceId] = useState(initialService?.id ?? "");
-  const [size, setSize] = useState<VehicleSize>(initialSize);
-  const [addonIds, setAddonIds] = useState<string[]>(initialAddonIds);
   const [dayKey, setDayKey] = useState("");
   const [slot, setSlot] = useState("");
   const [busy, setBusy] = useState<Busy[]>([]);
@@ -120,64 +106,62 @@ export default function PrenotaForm({ services, addons, initial }: Props) {
   const [done, setDone] = useState(false);
 
   const service = services.find((s) => s.id === serviceId);
-  const includedSlugs = INCLUDED_ADDONS[service?.slug ?? ""] ?? [];
-  const visibleAddons = addons.filter((a) => !includedSlugs.includes(a.slug));
-  const selectedAddonIds = addonIds.filter((id) => visibleAddons.some((a) => a.id === id));
-  const chosenAddons = visibleAddons.filter((a) => selectedAddonIds.includes(a.id));
+  const chosenAddons = addons.filter((a) => addonIds.includes(a.id));
   const duration =
     (service?.duration_min ?? 0) + chosenAddons.reduce((sum, a) => sum + a.duration_min, 0);
   const servicePrice = service?.prices[size];
   const estimate =
     (servicePrice?.cents ?? 0) + chosenAddons.reduce((sum, a) => sum + a.price_cents, 0);
+  const sizeLabel = VEHICLE_SIZES.find((v) => v.value === size)?.label ?? size;
 
   const selectedDay = days.find((d) => toKey(d) === dayKey);
   const slots = selectedDay && duration > 0 ? freeSlots(selectedDay, duration, busy, new Date()) : [];
   const openDays = days.filter((d) => workingHours(d) !== null);
 
-useEffect(() => {
-  let cancelled = false;
-
-  async function loadCalendar(attempt: number) {
-    const from = new Date();
-    const to = new Date();
-    to.setDate(to.getDate() + DAYS_AHEAD + 1);
-
-    let data: BusyRow[] | null = null;
-    let failed = false;
-    try {
-      const res = await supabase.rpc("get_busy_slots", {
-        p_from: from.toISOString(),
-        p_to: to.toISOString(),
-      });
-      if (res.error) failed = true;
-      else data = (res.data ?? []) as BusyRow[];
-    } catch {
-      failed = true;
-    }
-    if (cancelled) return;
-
-    if (failed) {
-      if (attempt < 3) {
-        setTimeout(() => loadCalendar(attempt + 1), 1500 * attempt);
-      } else {
-        setCalendarError(true);
-      }
-    } else {
-      setCalendarError(false);
-      setBusy(data ?? []);
-    }
-  }
-
-  loadCalendar(1);
-  return () => {
-    cancelled = true;
-  };
-}, []);
-
-  function toggleAddon(id: string) {
-    setAddonIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  // Quando cambia la selezione la durata cambia: gli orari scelti non valgono più
+  useEffect(() => {
     setSlot("");
-  }
+  }, [serviceId, size, addonIds.join(",")]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCalendar(attempt: number) {
+      const from = new Date();
+      const to = new Date();
+      to.setDate(to.getDate() + DAYS_AHEAD + 1);
+
+      let data: BusyRow[] | null = null;
+      let failed = false;
+      try {
+        const res = await supabase.rpc("get_busy_slots", {
+          p_from: from.toISOString(),
+          p_to: to.toISOString(),
+        });
+        if (res.error) failed = true;
+        else data = (res.data ?? []) as BusyRow[];
+      } catch {
+        failed = true;
+      }
+      if (cancelled) return;
+
+      if (failed) {
+        if (attempt < 3) {
+          setTimeout(() => loadCalendar(attempt + 1), 1500 * attempt);
+        } else {
+          setCalendarError(true);
+        }
+      } else {
+        setCalendarError(false);
+        setBusy(data ?? []);
+      }
+    }
+
+    loadCalendar(1);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function onFiles(list: FileList | null) {
     if (!list) return;
@@ -216,7 +200,7 @@ useEffect(() => {
       p_email: email,
       p_phone: phone,
       p_service_id: serviceId,
-      p_addon_ids: selectedAddonIds,
+      p_addon_ids: addonIds,
       p_starts_at: slot,
       p_payment_method: "on_site",
       p_vehicle_brand: brand,
@@ -258,7 +242,6 @@ useEffect(() => {
       );
     }
 
-    const chosen = addons.filter((a) => selectedAddonIds.includes(a.id));
     fetch("/api/notifica", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -270,8 +253,8 @@ useEffect(() => {
         modello: model,
         indirizzo: address,
         servizio: service?.name ?? "",
-        categoria: VEHICLE_SIZES.find((v) => v.value === size)?.label ?? size,
-        extra: chosen.map((a) => a.name),
+        categoria: sizeLabel,
+        extra: chosenAddons.map((a) => a.name),
         durataMin: duration,
         prezzo: servicePrice ? formatEuro(estimate) : "su preventivo",
         dataOra: new Date(slot).toLocaleString("it-IT", {
@@ -304,93 +287,27 @@ useEffect(() => {
 
   return (
     <form onSubmit={onSubmit} className="space-y-10">
-      {/* 1. Servizio */}
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold">1. Servizio</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {services.map((s) => (
-            <label
-              key={s.id}
-              className={`cursor-pointer rounded-xl border p-4 ${
-                serviceId === s.id ? "border-white bg-white/10" : "border-white/15"
-              }`}
-            >
-              <input
-                type="radio"
-                name="servizio"
-                value={s.id}
-                checked={serviceId === s.id}
-                onChange={() => {
-                  setServiceId(s.id);
-                  setSlot("");
-                }}
-                className="sr-only"
-              />
-              <span className="font-semibold">{s.name}</span>
-              <span className="block text-sm text-white/60">{formatDuration(s.duration_min)}</span>
-            </label>
-          ))}
-        </div>
+      {/* 1. Riepilogo della selezione */}
+      <section className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-5 text-sm">
+        <p className="font-semibold">La tua selezione</p>
+        <p className="text-white/80">
+          {service?.name ?? "-"} · {sizeLabel}
+        </p>
+        <p className="text-white/80">
+          Extra: {chosenAddons.length ? chosenAddons.map((a) => a.name).join(", ") : "nessuno"}
+        </p>
+        <p className="text-white/80">
+          Durata stimata: <strong>{formatDuration(duration)}</strong> · Prezzo indicativo:{" "}
+          <strong>{servicePrice ? formatEuro(estimate) : "su preventivo"}</strong>
+        </p>
+        <a href="#listino" className="inline-block underline text-white/70">
+          Modifica pacchetto ed extra
+        </a>
       </section>
 
-      {/* 2. Auto e add-on */}
+      {/* 2. Data e orario */}
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold">2. Auto e extra</h2>
-        <label className="block space-y-2">
-          <span className="text-sm text-white/70">Categoria auto</span>
-          <select
-            value={size}
-            onChange={(e) => {
-              setSize(e.target.value as VehicleSize);
-              setSlot("");
-            }}
-            className={input}
-          >
-            {VEHICLE_SIZES.map((v) => (
-              <option key={v.value} value={v.value}>
-                {v.label} ({v.example})
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {visibleAddons.length > 0 && (
-          <div className="space-y-2">
-            <span className="text-sm text-white/70">Extra (facoltativi)</span>
-            {visibleAddons.map((a) => (
-              <label key={a.id} className="flex items-center gap-3 rounded-lg border border-white/10 p-3">
-                <input
-                  type="checkbox"
-                  checked={selectedAddonIds.includes(a.id)}
-                  onChange={() => toggleAddon(a.id)}
-                />
-                <span className="flex-1">{a.name}</span>
-                <span className="text-sm text-white/60">
-                  +{formatEuro(a.price_cents)} · {formatDuration(a.duration_min)}
-                </span>
-              </label>
-            ))}
-          </div>
-        )}
-
-        <div className="rounded-xl bg-white/5 p-4 text-sm">
-          <p>
-            Durata stimata: <strong>{formatDuration(duration)}</strong>
-          </p>
-          <p>
-            Prezzo indicativo:{" "}
-            <strong>{servicePrice ? formatEuro(estimate) : "su preventivo"}</strong>
-          </p>
-          <p className="mt-2 text-white/60">
-            Eventuale trasferta fuori zona e sovrapprezzo per lo stato dell&apos;auto vengono
-            confermati da noi prima dell&apos;appuntamento.
-          </p>
-        </div>
-      </section>
-
-      {/* 3. Data e orario */}
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold">3. Data e orario</h2>
+        <h3 className="text-xl font-semibold">2. Data e orario</h3>
 
         {!dayKey ? (
           <>
@@ -434,37 +351,33 @@ useEffect(() => {
               </button>
             </div>
 
-            {duration === 0 ? (
-              <p className="text-white/60">Scegli prima un servizio.</p>
-            ) : (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                {slots.length === 0 && (
-                  <p className="col-span-full text-white/60">Nessun orario libero per questo giorno.</p>
-                )}
-                {slots.map((s) => {
-                  const iso = s.toISOString();
-                  return (
-                    <button
-                      key={iso}
-                      type="button"
-                      onClick={() => setSlot(iso)}
-                      className={`rounded-lg border px-2 py-2 text-sm ${
-                        slot === iso ? "border-white bg-white/10" : "border-white/15"
-                      }`}
-                    >
-                      {s.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {slots.length === 0 && (
+                <p className="col-span-full text-white/60">Nessun orario libero per questo giorno.</p>
+              )}
+              {slots.map((s) => {
+                const iso = s.toISOString();
+                return (
+                  <button
+                    key={iso}
+                    type="button"
+                    onClick={() => setSlot(iso)}
+                    className={`rounded-lg border px-2 py-2 text-sm ${
+                      slot === iso ? "border-white bg-white/10" : "border-white/15"
+                    }`}
+                  >
+                    {s.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                  </button>
+                );
+              })}
+            </div>
           </>
         )}
       </section>
 
-      {/* 4. Dati */}
+      {/* 3. Dati */}
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold">4. I tuoi dati</h2>
+        <h3 className="text-xl font-semibold">3. I tuoi dati</h3>
         <p className="text-sm text-white/60">
           Il servizio a domicilio è a Cesena, Forlì e Ravenna, entro 15 km dalla città più vicina.
           Fuori da quest&apos;area la trasferta viene confermata da noi prima dell&apos;appuntamento.
@@ -480,9 +393,9 @@ useEffect(() => {
         </div>
       </section>
 
-      {/* 5. Foto */}
+      {/* 4. Foto */}
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold">5. Foto degli interni (consigliate)</h2>
+        <h3 className="text-xl font-semibold">4. Foto degli interni (consigliate)</h3>
         <p className="text-sm text-white/60">
           Fino a {MAX_PHOTOS} foto, ciascuna max {MAX_PHOTO_MB} MB. Servono per valutare lo stato
           dell&apos;auto e il prezzo definitivo.
