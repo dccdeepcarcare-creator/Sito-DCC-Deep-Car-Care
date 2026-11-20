@@ -21,7 +21,7 @@ function base64url(input: Buffer | string) {
 
 let cachedToken: { token: string; exp: number } | null = null;
 
-async function getAccessToken(creds: Creds): Promise<string> {
+export async function getAccessToken(creds: Creds): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   if (cachedToken && cachedToken.exp > now + 60) return cachedToken.token;
 

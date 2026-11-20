@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import { VEHICLE_SIZES, formatEuro, type VehicleSize } from "../../lib/catalog";
 
+type Tab = "pending" | "confirmed" | "cancelled";
+
 type Booking = {
   id: string;
   starts_at: string;
@@ -13,6 +15,7 @@ type Booking = {
   service_price_cents: number;
   admin_surcharge_cents: number;
   surcharge_reason: string | null;
+  admin_note: string | null;
   total_cents: number;
   location_address: string | null;
   customer_notes: string | null;
@@ -22,9 +25,18 @@ type Booking = {
   vehicle: { brand: string | null; model: string | null; plate: string | null } | null;
 };
 
+type CalEvent = {
+  id: string;
+  summary: string;
+  location: string;
+  description: string;
+  start: string;
+  end: string;
+};
+
 const SELECT = `
   id, starts_at, status, vehicle_size, service_price_cents, admin_surcharge_cents,
-  surcharge_reason, total_cents, location_address, customer_notes, travel_fee_cents,
+  surcharge_reason, admin_note, total_cents, location_address, customer_notes, travel_fee_cents,
   service:services(name),
   profile:profiles(full_name,email,phone),
   vehicle:vehicles(brand,model,plate)
@@ -32,6 +44,9 @@ const SELECT = `
 
 const input =
   "w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 outline-none focus:border-white/60";
+
+const btnTab = (active: boolean) =>
+  `rounded-full border px-4 py-2 text-sm ${active ? "border-white bg-white/10" : "border-white/15"}`;
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleString("it-IT", {
@@ -43,7 +58,55 @@ function fmt(iso: string) {
   });
 }
 
-function BookingCard({ b, onDone }: { b: Booking; onDone: () => void }) {
+function mapsUrl(address: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
+
+function whatsappUrl(b: Booking) {
+  const digits = (b.profile?.phone ?? "").replace(/\D/g, "");
+  if (!digits) return null;
+  const intl = digits.startsWith("39") ? digits : `39${digits}`;
+  const category = VEHICLE_SIZES.find((v) => v.value === b.vehicle_size)?.label ?? b.vehicle_size;
+  const surcharge =
+    b.admin_surcharge_cents > 0
+      ? ` Il totale include un sovrapprezzo di ${formatEuro(b.admin_surcharge_cents)}${
+          b.surcharge_reason ? ` (${b.surcharge_reason})` : ""
+        }.`
+      : "";
+  const text =
+    `Ciao ${b.profile?.full_name ?? ""}, la tua prenotazione presso DCC Deep Car Care è confermata per il ${fmt(b.starts_at)}. ` +
+    `Servizio: ${b.service?.name ?? ""}. Categoria: ${category}. Totale finale: ${formatEuro(b.total_cents)}.${surcharge} ` +
+    `Indirizzo: ${b.location_address ?? ""}. A presto!`;
+  return `https://wa.me/${intl}?text=${encodeURIComponent(text)}`;
+}
+
+async function authHeaders(): Promise<HeadersInit> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${session?.access_token ?? ""}`,
+  };
+}
+
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function addDays(d: Date, n: number) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+}
+function startOfWeek(d: Date) {
+  const s = startOfDay(d);
+  return addDays(s, -((s.getDay() + 6) % 7));
+}
+function sameDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function BookingCard({ b, onDone }: { b: Booking; onDone: (next: Tab) => void }) {
   const [size, setSize] = useState<VehicleSize>(b.vehicle_size);
   const [surchargeEuro, setSurchargeEuro] = useState(0);
   const [reason, setReason] = useState("");
@@ -88,23 +151,29 @@ function BookingCard({ b, onDone }: { b: Booking; onDone: () => void }) {
       return;
     }
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch("/api/admin/calendar-sync", {
+    const headers = await authHeaders();
+    const cal = await fetch("/api/admin/calendar-sync", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session?.access_token ?? ""}`,
-      },
+      headers,
+      body: JSON.stringify({ bookingId: b.id }),
+    });
+    const mail = await fetch("/api/admin/notify-booking", {
+      method: "POST",
+      headers,
       body: JSON.stringify({ bookingId: b.id }),
     });
     setBusy(false);
-    if (!res.ok) {
+    if (!cal.ok) {
       alert("Prenotazione confermata, ma l'evento nel calendario non è stato creato. Controlla i log di Vercel.");
     }
-    onDone();
+    if (!mail.ok) {
+      alert("Prenotazione confermata, ma l'email al cliente non è stata inviata.");
+    }
+    onDone("confirmed");
   }
 
   async function reject() {
+    if (!window.confirm("Sei sicuro di voler rifiutare questa prenotazione?")) return;
     setBusy(true);
     setMsg(null);
     const { error } = await supabase.rpc("admin_reject_booking", {
@@ -113,10 +182,23 @@ function BookingCard({ b, onDone }: { b: Booking; onDone: () => void }) {
     });
     setBusy(false);
     if (error) setMsg(error.message);
-    else onDone();
+    else onDone("cancelled");
   }
 
-  const pending = b.status === "pending";
+  const addressLink = b.location_address ? (
+    <a
+      href={mapsUrl(b.location_address)}
+      target="_blank"
+      rel="noreferrer"
+      className="text-sky-300 underline"
+    >
+      {b.location_address}
+    </a>
+  ) : (
+    <span>-</span>
+  );
+
+  const wa = whatsappUrl(b);
 
   return (
     <article className="space-y-4 rounded-2xl border border-white/10 p-5">
@@ -131,7 +213,7 @@ function BookingCard({ b, onDone }: { b: Booking; onDone: () => void }) {
           <p className="text-white/70">
             {b.vehicle?.brand} {b.vehicle?.model} {b.vehicle?.plate ? `· ${b.vehicle.plate}` : ""}
           </p>
-          <p className="text-white/70">Indirizzo: {b.location_address}</p>
+          <p className="text-white/70">Indirizzo: {addressLink}</p>
           {b.customer_notes && <p className="text-white/70">Note: {b.customer_notes}</p>}
         </div>
         <div className="text-right text-sm">
@@ -139,7 +221,12 @@ function BookingCard({ b, onDone }: { b: Booking; onDone: () => void }) {
             Totale: <strong>{formatEuro(b.total_cents)}</strong>
           </p>
           <p className="text-white/60">Trasferta: {formatEuro(b.travel_fee_cents)}</p>
-          <p className="text-white/60">Stato: {b.status}</p>
+          {b.admin_surcharge_cents > 0 && (
+            <p className="text-white/60">
+              Sovrapprezzo: {formatEuro(b.admin_surcharge_cents)}
+              {b.surcharge_reason ? ` (${b.surcharge_reason})` : ""}
+            </p>
+          )}
         </div>
       </header>
 
@@ -154,7 +241,7 @@ function BookingCard({ b, onDone }: { b: Booking; onDone: () => void }) {
         ))}
       </div>
 
-      {pending && (
+      {b.status === "pending" && (
         <div className="space-y-3 border-t border-white/10 pt-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="space-y-1 text-sm">
@@ -214,8 +301,199 @@ function BookingCard({ b, onDone }: { b: Booking; onDone: () => void }) {
           </div>
         </div>
       )}
+
+      {b.status === "confirmed" && (
+        <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4">
+          {wa ? (
+            <a
+              href={wa}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full bg-emerald-400 px-5 py-2 font-semibold text-black"
+            >
+              Invia WhatsApp di conferma
+            </a>
+          ) : (
+            <p className="text-sm text-white/60">Telefono mancante: impossibile aprire WhatsApp.</p>
+          )}
+        </div>
+      )}
+
+      {b.status === "cancelled" && (
+        <p className="border-t border-white/10 pt-4 text-sm text-white/70">
+          Motivo del rifiuto: {b.admin_note || "non indicato"}
+        </p>
+      )}
+
       {msg && <p className="text-sm text-amber-300">{msg}</p>}
     </article>
+  );
+}
+
+function EventItem({ e }: { e: CalEvent }) {
+  const allDay = !e.start.includes("T");
+  const time = allDay
+    ? "Tutto il giorno"
+    : new Date(e.start).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className="rounded-md bg-white/5 p-2 text-xs">
+      <p className="font-semibold">
+        {time} · {e.summary}
+      </p>
+      {e.location && (
+        <a
+          href={mapsUrl(e.location)}
+          target="_blank"
+          rel="noreferrer"
+          className="block truncate text-sky-300 underline"
+        >
+          {e.location}
+        </a>
+      )}
+    </div>
+  );
+}
+
+type View = "day" | "week" | "month";
+
+function getRange(view: View, anchor: Date) {
+  if (view === "day") return { from: anchor, to: addDays(anchor, 1) };
+  if (view === "week") {
+    const from = startOfWeek(anchor);
+    return { from, to: addDays(from, 7) };
+  }
+  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const from = startOfWeek(first);
+  return { from, to: addDays(from, 42) };
+}
+
+function CalendarMirror() {
+  const [view, setView] = useState<View>("week");
+  const [anchor, setAnchor] = useState<Date>(() => startOfDay(new Date()));
+  const [events, setEvents] = useState<CalEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const range = getRange(view, anchor);
+  const fromMs = range.from.getTime();
+  const toMs = range.to.getTime();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setErr(null);
+      const params = new URLSearchParams({
+        from: new Date(fromMs).toISOString(),
+        to: new Date(toMs).toISOString(),
+      });
+      const res = await fetch(`/api/admin/calendar-events?${params.toString()}`, {
+        headers: await authHeaders(),
+      });
+      const json = (await res.json()) as { ok: boolean; events?: CalEvent[]; error?: string };
+      if (cancelled) return;
+      setLoading(false);
+      if (!json.ok) setErr(json.error ?? "Errore nel caricamento");
+      else setEvents(json.events ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fromMs, toMs]);
+
+  function move(dir: number) {
+    if (view === "day") setAnchor(addDays(anchor, dir));
+    else if (view === "week") setAnchor(addDays(anchor, 7 * dir));
+    else setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1));
+  }
+
+  function eventsOn(day: Date) {
+    return events
+      .filter((e) => e.start && sameDay(new Date(e.start), day))
+      .sort((a, b) => a.start.localeCompare(b.start));
+  }
+
+  const title =
+    view === "month"
+      ? anchor.toLocaleDateString("it-IT", { month: "long", year: "numeric" })
+      : view === "week"
+      ? `${range.from.toLocaleDateString("it-IT", { day: "numeric", month: "short" })} – ${addDays(
+          range.from,
+          6
+        ).toLocaleDateString("it-IT", { day: "numeric", month: "short", year: "numeric" })}`
+      : anchor.toLocaleDateString("it-IT", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        });
+
+  const count = view === "day" ? 1 : view === "week" ? 7 : 42;
+  const days = Array.from({ length: count }, (_, i) => addDays(range.from, i));
+  const gridCols =
+    view === "day" ? "grid-cols-1" : view === "week" ? "grid-cols-1 md:grid-cols-7" : "grid-cols-7";
+  const limit = view === "month" ? 3 : 50;
+
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-2">
+          <button type="button" onClick={() => move(-1)} className={btnTab(false)}>
+            ←
+          </button>
+          <button type="button" onClick={() => setAnchor(startOfDay(new Date()))} className={btnTab(false)}>
+            Oggi
+          </button>
+          <button type="button" onClick={() => move(1)} className={btnTab(false)}>
+            →
+          </button>
+        </div>
+        <p className="font-semibold capitalize">{title}</p>
+        <div className="flex gap-2">
+          {(["day", "week", "month"] as View[]).map((v) => (
+            <button key={v} type="button" onClick={() => setView(v)} className={btnTab(view === v)}>
+              {v === "day" ? "Giorno" : v === "week" ? "Settimana" : "Mese"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading && <p className="text-sm text-white/60">Caricamento calendario…</p>}
+      {err && <p className="text-sm text-amber-300">{err}</p>}
+
+      <div className={`grid gap-2 ${gridCols}`}>
+        {days.map((day) => {
+          const dayEvents = eventsOn(day);
+          const inMonth = day.getMonth() === anchor.getMonth();
+          const isToday = sameDay(day, new Date());
+          return (
+            <div
+              key={day.toISOString()}
+              className={`min-h-24 space-y-1 rounded-lg border p-2 ${
+                isToday ? "border-white/60" : "border-white/10"
+              } ${view === "month" && !inMonth ? "opacity-40" : ""}`}
+            >
+              <p className="text-xs font-semibold text-white/70">
+                {day.toLocaleDateString("it-IT", {
+                  weekday: view === "day" ? "long" : "short",
+                  day: "numeric",
+                  month: view === "day" ? "long" : undefined,
+                })}
+              </p>
+              {dayEvents.length === 0 && view !== "month" && (
+                <p className="text-xs text-white/40">Libero</p>
+              )}
+              {dayEvents.slice(0, limit).map((e) => (
+                <EventItem key={e.id} e={e} />
+              ))}
+              {dayEvents.length > limit && (
+                <p className="text-xs text-white/60">+{dayEvents.length - limit} altri</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -223,14 +501,15 @@ export default function AdminPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [tab, setTab] = useState<"pending" | "confirmed">("pending");
+  const [tab, setTab] = useState<Tab>("pending");
+  const [section, setSection] = useState<"bookings" | "calendar">("bookings");
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
       .from("bookings")
       .select(SELECT)
-      .in("status", ["pending", "confirmed"])
+      .in("status", ["pending", "confirmed", "cancelled"])
       .order("starts_at", { ascending: true });
     if (error) setError(error.message);
     else setBookings((data ?? []) as unknown as Booking[]);
@@ -258,6 +537,11 @@ export default function AdminPage() {
     router.push("/accedi");
   }
 
+  function handleDone(next: Tab) {
+    setTab(next);
+    load();
+  }
+
   if (error) {
     return (
       <main className="mx-auto max-w-3xl px-6 pb-20 pt-32">
@@ -269,12 +553,16 @@ export default function AdminPage() {
     return <main className="mx-auto max-w-3xl px-6 pb-20 pt-32 text-white/70">Caricamento…</main>;
   }
 
-  const pendingCount = bookings.filter((b) => b.status === "pending").length;
-  const confirmedCount = bookings.filter((b) => b.status === "confirmed").length;
+  const counts = {
+    pending: bookings.filter((b) => b.status === "pending").length,
+    confirmed: bookings.filter((b) => b.status === "confirmed").length,
+    cancelled: bookings.filter((b) => b.status === "cancelled").length,
+  };
   const list = bookings.filter((b) => b.status === tab);
+  const shown = tab === "cancelled" ? [...list].reverse() : list;
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 px-6 pb-20 pt-32">
+    <main className="mx-auto max-w-5xl space-y-6 px-6 pb-20 pt-32">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-semibold">Dashboard</h1>
         <button type="button" onClick={logout} className="text-sm text-white/70 underline">
@@ -283,32 +571,38 @@ export default function AdminPage() {
       </div>
 
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => setTab("pending")}
-          className={`rounded-full border px-4 py-2 text-sm ${
-            tab === "pending" ? "border-white bg-white/10" : "border-white/15"
-          }`}
-        >
-          Da confermare ({pendingCount})
+        <button type="button" onClick={() => setSection("bookings")} className={btnTab(section === "bookings")}>
+          Prenotazioni
         </button>
-        <button
-          type="button"
-          onClick={() => setTab("confirmed")}
-          className={`rounded-full border px-4 py-2 text-sm ${
-            tab === "confirmed" ? "border-white bg-white/10" : "border-white/15"
-          }`}
-        >
-          Confermate ({confirmedCount})
+        <button type="button" onClick={() => setSection("calendar")} className={btnTab(section === "calendar")}>
+          Calendario
         </button>
       </div>
 
-      {list.length === 0 && <p className="text-white/60">Nessuna prenotazione.</p>}
-      <div className="space-y-4">
-        {list.map((b) => (
-          <BookingCard key={b.id} b={b} onDone={load} />
-        ))}
-      </div>
+      {section === "bookings" && (
+        <>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setTab("pending")} className={btnTab(tab === "pending")}>
+              Da confermare ({counts.pending})
+            </button>
+            <button type="button" onClick={() => setTab("confirmed")} className={btnTab(tab === "confirmed")}>
+              Confermate ({counts.confirmed})
+            </button>
+            <button type="button" onClick={() => setTab("cancelled")} className={btnTab(tab === "cancelled")}>
+              Rifiutate ({counts.cancelled})
+            </button>
+          </div>
+
+          {shown.length === 0 && <p className="text-white/60">Nessuna prenotazione.</p>}
+          <div className="space-y-4">
+            {shown.map((b) => (
+              <BookingCard key={b.id} b={b} onDone={handleDone} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {section === "calendar" && <CalendarMirror />}
     </main>
   );
 }
