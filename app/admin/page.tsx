@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import { VEHICLE_SIZES, formatEuro, type VehicleSize } from "../../lib/catalog";
+import ManualBooking from "./ManualBooking";
 
 type Tab = "pending" | "confirmed" | "cancelled";
 
@@ -502,7 +503,7 @@ export default function AdminPage() {
   const [ready, setReady] = useState(false);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [tab, setTab] = useState<Tab>("pending");
-  const [section, setSection] = useState<"bookings" | "calendar">("bookings");
+  const [section, setSection] = useState<"bookings" | "calendar" | "manual">("bookings");
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -576,7 +577,9 @@ export default function AdminPage() {
         </button>
         <button type="button" onClick={() => setSection("calendar")} className={btnTab(section === "calendar")}>
           Calendario
-        </button>
+        </button><button type="button" onClick={() => setSection("manual")} className={btnTab(section === "manual")}>
+  Nuova prenotazione
+</button>
       </div>
 
       {section === "bookings" && (
@@ -603,6 +606,7 @@ export default function AdminPage() {
       )}
 
       {section === "calendar" && <CalendarMirror />}
+      {section === "manual" && <ManualBooking onCreated={() => setSection("calendar")} />}
     </main>
   );
 }
