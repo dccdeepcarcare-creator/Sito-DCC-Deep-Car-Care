@@ -33,6 +33,7 @@ type CalEvent = {
   description: string;
   start: string;
   end: string;
+  bookingId: string | null;
 };
 
 const SELECT = `
@@ -107,7 +108,15 @@ function sameDay(a: Date, b: Date) {
   );
 }
 
-function BookingCard({ b, onDone }: { b: Booking; onDone: (next: Tab) => void }) {
+function BookingCard({
+  b,
+  onDone,
+  highlight,
+}: {
+  b: Booking;
+  onDone: (next: Tab) => void;
+  highlight: boolean;
+}) {
   const [size, setSize] = useState<VehicleSize>(b.vehicle_size);
   const [surchargeEuro, setSurchargeEuro] = useState(0);
   const [reason, setReason] = useState("");
@@ -202,7 +211,10 @@ function BookingCard({ b, onDone }: { b: Booking; onDone: (next: Tab) => void })
   const wa = whatsappUrl(b);
 
   return (
-    <article className="space-y-4 rounded-2xl border border-white/10 p-5">
+    <article
+      id={`booking-${b.id}`}
+      className={`space-y-4 rounded-2xl border p-5 ${highlight ? "border-white" : "border-white/10"}`}
+    >
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div className="space-y-1 text-sm">
           <p className="font-semibold">
@@ -331,26 +343,100 @@ function BookingCard({ b, onDone }: { b: Booking; onDone: (next: Tab) => void })
   );
 }
 
-function EventItem({ e }: { e: CalEvent }) {
+function EventItem({ e, onOpen }: { e: CalEvent; onOpen: (ev: CalEvent) => void }) {
   const allDay = !e.start.includes("T");
   const time = allDay
     ? "Tutto il giorno"
     : new Date(e.start).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
   return (
-    <div className="rounded-md bg-white/5 p-2 text-xs">
+    <button
+      type="button"
+      onClick={() => onOpen(e)}
+      className="block w-full rounded-md bg-white/5 p-2 text-left text-xs hover:bg-white/10"
+    >
       <p className="font-semibold">
         {time} · {e.summary}
       </p>
       {e.location && (
-        <a
-          href={mapsUrl(e.location)}
-          target="_blank"
-          rel="noreferrer"
+        <span
+          role="link"
+          onClick={(ev) => {
+            ev.stopPropagation();
+            window.open(mapsUrl(e.location), "_blank", "noopener,noreferrer");
+          }}
           className="block truncate text-sky-300 underline"
         >
           {e.location}
-        </a>
+        </span>
       )}
+    </button>
+  );
+}
+
+function EventDetails({
+  e,
+  onClose,
+  onOpenBooking,
+}: {
+  e: CalEvent;
+  onClose: () => void;
+  onOpenBooking: (id: string) => void;
+}) {
+  const allDay = !e.start.includes("T");
+  const when = allDay
+    ? new Date(e.start).toLocaleDateString("it-IT", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : new Date(e.start).toLocaleString("it-IT", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+  const bid = e.bookingId;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md space-y-4 rounded-2xl border border-white/15 bg-[#0b0b0d] p-6"
+        onClick={(ev) => ev.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <h2 className="text-xl font-semibold">{e.summary}</h2>
+          <button type="button" onClick={onClose} className="text-sm text-white/60 underline">
+            Chiudi
+          </button>
+        </div>
+        <p className="text-sm capitalize text-white/70">{when}</p>
+        {e.location && (
+          <a
+            href={mapsUrl(e.location)}
+            target="_blank"
+            rel="noreferrer"
+            className="block text-sm text-sky-300 underline"
+          >
+            {e.location}
+          </a>
+        )}
+        {e.description && (
+          <pre className="whitespace-pre-wrap font-sans text-sm text-white/80">{e.description}</pre>
+        )}
+        {bid && (
+          <button
+            type="button"
+            onClick={() => onOpenBooking(bid)}
+            className="w-full rounded-full bg-white px-5 py-2 font-semibold text-black"
+          >
+            Apri la prenotazione
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -368,10 +454,11 @@ function getRange(view: View, anchor: Date) {
   return { from, to: addDays(from, 42) };
 }
 
-function CalendarMirror() {
+function CalendarMirror({ onOpenBooking }: { onOpenBooking: (id: string) => void }) {
   const [view, setView] = useState<View>("week");
   const [anchor, setAnchor] = useState<Date>(() => startOfDay(new Date()));
   const [events, setEvents] = useState<CalEvent[]>([]);
+  const [selected, setSelected] = useState<CalEvent | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -485,7 +572,7 @@ function CalendarMirror() {
                 <p className="text-xs text-white/40">Libero</p>
               )}
               {dayEvents.slice(0, limit).map((e) => (
-                <EventItem key={e.id} e={e} />
+                <EventItem key={e.id} e={e} onOpen={setSelected} />
               ))}
               {dayEvents.length > limit && (
                 <p className="text-xs text-white/60">+{dayEvents.length - limit} altri</p>
@@ -494,6 +581,10 @@ function CalendarMirror() {
           );
         })}
       </div>
+
+      {selected && (
+        <EventDetails e={selected} onClose={() => setSelected(null)} onOpenBooking={onOpenBooking} />
+      )}
     </section>
   );
 }
@@ -504,6 +595,7 @@ export default function AdminPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [tab, setTab] = useState<Tab>("pending");
   const [section, setSection] = useState<"bookings" | "calendar" | "manual">("bookings");
+  const [focusId, setFocusId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -533,6 +625,15 @@ export default function AdminPage() {
     })();
   }, [router, load]);
 
+  // Dopo "Apri la prenotazione" dal calendario: mostra la scheda nella scheda giusta e la porta a vista
+  useEffect(() => {
+    if (!focusId || section !== "bookings") return;
+    const t = setTimeout(() => {
+      document.getElementById(`booking-${focusId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+    return () => clearTimeout(t);
+  }, [focusId, section, tab, bookings]);
+
   async function logout() {
     await supabase.auth.signOut();
     router.push("/accedi");
@@ -541,6 +642,17 @@ export default function AdminPage() {
   function handleDone(next: Tab) {
     setTab(next);
     load();
+  }
+
+  function openBooking(id: string) {
+    const b = bookings.find((x) => x.id === id);
+    if (!b) {
+      alert("Prenotazione non trovata: potrebbe essere stata completata o eliminata.");
+      return;
+    }
+    setSection("bookings");
+    setTab(b.status as Tab);
+    setFocusId(id);
   }
 
   if (error) {
@@ -571,15 +683,16 @@ export default function AdminPage() {
         </button>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => setSection("bookings")} className={btnTab(section === "bookings")}>
           Prenotazioni
         </button>
         <button type="button" onClick={() => setSection("calendar")} className={btnTab(section === "calendar")}>
           Calendario
-        </button><button type="button" onClick={() => setSection("manual")} className={btnTab(section === "manual")}>
-  Nuova prenotazione
-</button>
+        </button>
+        <button type="button" onClick={() => setSection("manual")} className={btnTab(section === "manual")}>
+          Nuova prenotazione
+        </button>
       </div>
 
       {section === "bookings" && (
@@ -599,13 +712,14 @@ export default function AdminPage() {
           {shown.length === 0 && <p className="text-white/60">Nessuna prenotazione.</p>}
           <div className="space-y-4">
             {shown.map((b) => (
-              <BookingCard key={b.id} b={b} onDone={handleDone} />
+              <BookingCard key={b.id} b={b} onDone={handleDone} highlight={focusId === b.id} />
             ))}
           </div>
         </>
       )}
 
-      {section === "calendar" && <CalendarMirror />}
+      {section === "calendar" && <CalendarMirror onOpenBooking={openBooking} />}
+
       {section === "manual" && <ManualBooking onCreated={() => setSection("calendar")} />}
     </main>
   );

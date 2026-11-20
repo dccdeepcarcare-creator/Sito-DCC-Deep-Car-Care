@@ -9,6 +9,7 @@ type GoogleEvent = {
   description?: string;
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
+  extendedProperties?: { private?: { bookingId?: string } };
 };
 
 export async function GET(req: Request) {
@@ -57,6 +58,7 @@ export async function GET(req: Request) {
       description: e.description ?? "",
       start: e.start?.dateTime ?? e.start?.date ?? "",
       end: e.end?.dateTime ?? e.end?.date ?? "",
+      bookingId: e.extendedProperties?.private?.bookingId ?? null,
     }));
     return NextResponse.json({ ok: true, events });
   } catch (err) {
