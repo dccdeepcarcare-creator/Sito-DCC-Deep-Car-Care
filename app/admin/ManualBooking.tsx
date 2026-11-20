@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { supabase } from "../../lib/supabase";
 import { ListinoConfigurator } from "../../components/ListinoConfigurator";
 import {
-  VEHICLE_SIZES,
   formatDuration,
   type Addon,
   type Service,
