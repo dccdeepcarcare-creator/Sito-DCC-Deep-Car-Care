@@ -1,4 +1,16 @@
-import { supabase } from "./supabase";
+import { createClient } from "@supabase/supabase-js";
+
+// Client dedicato al listino: legge sempre i dati aggiornati, senza cache
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    global: {
+      fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+        fetch(input, { ...init, cache: "no-store" }),
+    },
+  }
+);
 
 export type VehicleSize = "city" | "sedan" | "suv" | "luxury";
 
