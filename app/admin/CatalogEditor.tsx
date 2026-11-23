@@ -216,7 +216,7 @@ function ServiceRow({
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)} />
-          Etichetta "Il più scelto"
+          Etichetta &quot;Il più scelto&quot;
         </label>
       </div>
 
@@ -226,7 +226,7 @@ function ServiceRow({
       </label>
 
       <div className="space-y-2">
-        <p className="text-sm text-white/70">Prezzi per categoria (lascia vuoto per "Su richiesta")</p>
+        <p className="text-sm text-white/70">Prezzi per categoria (lascia vuoto per &quot;Su richiesta&quot;)</p>
         <div className="grid gap-2 sm:grid-cols-2">
           {VEHICLE_SIZES.map((v) => (
             <div key={v.value} className="flex items-center gap-2 text-sm">
