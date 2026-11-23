@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
-import { VEHICLE_SIZES, formatEuro, type VehicleSize } from "../../lib/catalog";import ManualBooking from "./ManualBooking";
+import { VEHICLE_SIZES, formatEuro, type VehicleSize } from "../../lib/catalog";
+import ManualBooking from "./ManualBooking";
 import CatalogEditor from "./CatalogEditor";
 
 type Tab = "pending" | "confirmed" | "cancelled";
