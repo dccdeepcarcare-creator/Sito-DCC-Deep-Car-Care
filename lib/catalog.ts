@@ -48,12 +48,14 @@ export async function getCatalog(): Promise<{ services: Service[]; addons: Addon
       .from("services")
       .select("id,slug,name,tagline,description,features,duration_min,is_featured")
       .eq("is_active", true)
+      .is("deleted_at", null)
       .eq("category", "interior")
       .order("sort_order", { ascending: true }),
     supabase
       .from("addons")
       .select("id,slug,name,description,price_cents,duration_min")
       .eq("is_active", true)
+      .is("deleted_at", null)
       .eq("category", "interior")
       .order("sort_order", { ascending: true }),
     supabase.from("service_prices").select("service_id,vehicle_size,price_cents,is_from"),
