@@ -3,7 +3,7 @@ import { Footer } from "../../components/Footer";
 import { ListinoFlow } from "../../components/ListinoFlow";
 import { getCatalog } from "../../lib/catalog";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Listino e prenotazione | DCC Deep Car Care",

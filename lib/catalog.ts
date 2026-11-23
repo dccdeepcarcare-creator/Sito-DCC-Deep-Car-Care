@@ -21,6 +21,7 @@ export type Service = {
   duration_min: number;
   is_featured: boolean;
   prices: Partial<Record<VehicleSize, PriceInfo>>;
+  addonIds: string[];
 };
 
 export type Addon = {
@@ -39,8 +40,10 @@ type PriceRow = {
   is_from: boolean;
 };
 
+type LinkRow = { service_id: string; addon_id: string };
+
 export async function getCatalog(): Promise<{ services: Service[]; addons: Addon[] }> {
-  const [s, a, p] = await Promise.all([
+  const [s, a, p, l] = await Promise.all([
     supabase
       .from("services")
       .select("id,slug,name,tagline,description,features,duration_min,is_featured")
@@ -54,21 +57,25 @@ export async function getCatalog(): Promise<{ services: Service[]; addons: Addon
       .eq("category", "interior")
       .order("sort_order", { ascending: true }),
     supabase.from("service_prices").select("service_id,vehicle_size,price_cents,is_from"),
+    supabase.from("service_addons").select("service_id,addon_id"),
   ]);
 
-  if (s.error || a.error || p.error) {
-    console.error("[catalogo] lettura fallita:", s.error?.message ?? a.error?.message ?? p.error?.message);
+  const err = s.error?.message ?? a.error?.message ?? p.error?.message ?? l.error?.message;
+  if (err) {
+    console.error("[catalogo] lettura fallita:", err);
   }
 
   const prices = (p.data ?? []) as PriceRow[];
-  const services: Service[] = ((s.data ?? []) as Omit<Service, "prices">[]).map((svc) => {
+  const links = (l.data ?? []) as LinkRow[];
+  const services: Service[] = ((s.data ?? []) as Omit<Service, "prices" | "addonIds">[]).map((svc) => {
     const map: Service["prices"] = {};
     for (const row of prices) {
       if (row.service_id === svc.id) {
         map[row.vehicle_size] = { cents: row.price_cents, from: row.is_from };
       }
     }
-    return { ...svc, prices: map };
+    const addonIds = links.filter((x) => x.service_id === svc.id).map((x) => x.addon_id);
+    return { ...svc, prices: map, addonIds };
   });
 
   return { services, addons: (a.data ?? []) as Addon[] };

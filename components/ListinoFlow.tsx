@@ -19,10 +19,12 @@ export function ListinoFlow({ services, addons }: { services: Service[]; addons:
 
   const service = services.find((s) => s.id === serviceId) ?? services[0];
 
+  // Solo gli extra compatibili con il pacchetto scelto, esclusi quelli già inclusi
   const visibleAddons = useMemo(() => {
     const included = INCLUDED_ADDONS[service?.slug ?? ""] ?? [];
-    return addons.filter((a) => !included.includes(a.slug));
-  }, [addons, service?.slug]);
+    const allowed = service?.addonIds ?? [];
+    return addons.filter((a) => !included.includes(a.slug) && allowed.includes(a.id));
+  }, [addons, service]);
 
   const selectedIds = selected.filter((id) => visibleAddons.some((a) => a.id === id));
 
