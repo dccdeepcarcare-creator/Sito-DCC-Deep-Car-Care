@@ -57,10 +57,10 @@ export function Navbar() {
 
         <div className="flex items-center gap-2">
           <Link
-            href="/prenota"
+            href="/listino#prenota"
             className="inline-flex items-center rounded-md bg-oro px-4 py-2 text-sm font-semibold text-carbon transition-colors hover:bg-oro-light sm:px-5 sm:py-2.5"
           >
-            Prenota Ora
+            Prenota ora
           </Link>
           <button
             type="button"

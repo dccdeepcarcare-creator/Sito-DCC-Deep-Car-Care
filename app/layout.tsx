@@ -64,7 +64,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="it" className={archivo.variable}>
-      <body className="bg-carbon font-sans text-testo antialiased">
+      <body className="bg-carbon font-sans text-testo antialiased selection:bg-oro selection:text-carbon">
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-oro focus:px-4 focus:py-2 focus:text-carbon"

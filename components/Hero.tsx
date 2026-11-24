@@ -49,12 +49,7 @@ export function Hero() {
           ))}
         </h1>
 
-        <motion.span
-          className="mt-8 block h-0.5 w-20 origin-left bg-oro"
-          initial={reduce ? false : { scaleX: 0 }}
-          animate={{ scaleX: 1 }}
-          transition={{ duration: 0.7, delay: 1.0, ease }}
-        />
+        <span className="mt-8 block h-0.5 w-20 bg-oro" />
 
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 12 }}
@@ -62,15 +57,16 @@ export function Hero() {
           transition={{ duration: 0.7, delay: 1.1, ease }}
         >
           <p className="mt-6 max-w-xl text-base leading-relaxed text-testo/80 sm:text-lg">
-            Detailing interni a Ravenna, su appuntamento. Pulizia profonda di sedili, pelle e plastiche,
-            sanificazione e protezione dei materiali: tutto eseguito a mano.
+            Detailing interni professionale: l’eccellenza del lavaggio al dettaglio a domicilio.
+Sono un professionista del settore, guidato da una grande passione per la cura dell'auto. Eseguo rigorosamente a mano pulizia profonda di sedili, pelle e plastiche, sanificazione e protezione dei materiali, per restituirti un abitacolo pari al nuovo — o persino migliore.
+Opero su appuntamento a domicilio per privati e concessionarie,preparazione pre-vendita, nelle province di Ravenna, Forlì-Cesena, Rimini e nella Repubblica di San Marino. Prenota ora il tuo intervento.
           </p>
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <Link
-              href="/prenota"
-              className="inline-flex items-center justify-center rounded-md bg-oro px-7 py-3.5 text-base font-semibold text-carbon shadow-glow transition-colors hover:bg-oro-light"
+              href="/listino#prenota"
+              className="inline-flex items-center justify-center rounded-md bg-oro px-7 py-3.5 text-base font-semibold shadow-glow transition-colors hover:bg-oro-light"
             >
-              Prenota Ora
+              Prenota ora
             </Link>
             <Link
               href="#prima-dopo"
