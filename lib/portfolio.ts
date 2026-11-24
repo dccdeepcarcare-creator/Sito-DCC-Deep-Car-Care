@@ -9,6 +9,14 @@ export type BeforeAfter = {
   after: string;
 };
 
+export type SingleImage = {
+  id: string;
+  title: string;
+  vehicle: string | null;
+  description: string | null;
+  src: string;
+};
+
 export type ReelVideo = {
   id: string;
   title: string;
@@ -21,7 +29,7 @@ export type ReelVideo = {
 
 type Row = {
   id: string;
-  type: "before_after" | "video";
+  type: "before_after" | "video" | "single_image";
   title: string;
   description: string | null;
   vehicle_label: string | null;
@@ -49,7 +57,11 @@ export function youtubeId(url: string): string | null {
   return m ? m[1] : null;
 }
 
-export async function getPortfolio(): Promise<{ beforeAfter: BeforeAfter[]; videos: ReelVideo[] }> {
+export async function getPortfolio(): Promise<{
+  beforeAfter: BeforeAfter[];
+  singles: SingleImage[];
+  videos: ReelVideo[];
+}> {
   const { data, error } = await supabase
     .from("portfolio_items")
     .select(COLUMNS)
@@ -59,10 +71,11 @@ export async function getPortfolio(): Promise<{ beforeAfter: BeforeAfter[]; vide
 
   if (error || !data) {
     console.error("[portfolio] lettura fallita:", error?.message);
-    return { beforeAfter: [], videos: [] };
+    return { beforeAfter: [], singles: [], videos: [] };
   }
 
   const beforeAfter: BeforeAfter[] = [];
+  const singles: SingleImage[] = [];
   const videos: ReelVideo[] = [];
 
   for (const row of data as unknown as Row[]) {
@@ -77,6 +90,17 @@ export async function getPortfolio(): Promise<{ beforeAfter: BeforeAfter[]; vide
           description: row.description,
           before,
           after,
+        });
+      }
+    } else if (row.type === "single_image") {
+      const src = publicUrl(row.before_image_path);
+      if (src) {
+        singles.push({
+          id: row.id,
+          title: row.title,
+          vehicle: row.vehicle_label,
+          description: row.description,
+          src,
         });
       }
     } else if (row.type === "video" && row.video_url) {
@@ -97,5 +121,5 @@ export async function getPortfolio(): Promise<{ beforeAfter: BeforeAfter[]; vide
     }
   }
 
-  return { beforeAfter, videos };
+  return { beforeAfter, singles, videos };
 }

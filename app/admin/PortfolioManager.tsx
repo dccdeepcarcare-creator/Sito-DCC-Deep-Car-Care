@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { publicUrl, youtubeId } from "../../lib/portfolio";
 
-type ItemType = "before_after" | "video";
+type ItemType = "before_after" | "video" | "single_image";
 
 type Item = {
   id: string;
@@ -36,7 +36,12 @@ const GROUPS: { type: ItemType; title: string; hint: string }[] = [
   {
     type: "before_after",
     title: "Prima e dopo",
-    hint: "Due foto per ogni lavoro. Per cambiare una foto, elimina la voce e aggiungila di nuovo.",
+    hint: "Due foto per ogni lavoro, con il cursore per confrontarle. Per cambiare una foto, elimina la voce e aggiungila di nuovo.",
+  },
+  {
+    type: "single_image",
+    title: "Foto singole",
+    hint: "Una sola foto con titolo e didascalia, senza effetti. Compare nella sezione Galleria.",
   },
   {
     type: "video",
@@ -85,11 +90,19 @@ function NewItemForm({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const formTitle =
+    type === "before_after"
+      ? "Nuovo lavoro prima/dopo"
+      : type === "single_image"
+      ? "Nuova foto singola"
+      : "Nuovo video";
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     if (!title.trim()) return setErr("Inserisci un titolo.");
     if (type === "before_after" && (!before || !after)) return setErr("Carica la foto prima e la foto dopo.");
+    if (type === "single_image" && !before) return setErr("Carica una foto.");
     if (type === "video" && !video) return setErr("Scegli un file video.");
     if (video && video.size > MAX_VIDEO_MB * 1024 * 1024) {
       return setErr(`Il video supera ${MAX_VIDEO_MB} MB. Comprimilo e riprova.`);
@@ -114,7 +127,11 @@ function NewItemForm({
         uploaded.push(a);
         row.before_image_path = b;
         row.after_image_path = a;
-      } else if (video) {
+      } else if (type === "single_image" && before) {
+        const p = await uploadFile(before, "single-images");
+        uploaded.push(p);
+        row.before_image_path = p;
+      } else if (type === "video" && video) {
         const v = await uploadFile(video, "videos");
         uploaded.push(v);
         row.video_url = v;
@@ -138,7 +155,7 @@ function NewItemForm({
 
   return (
     <form onSubmit={save} className="space-y-4 rounded-2xl border border-white/15 p-5">
-      <p className="font-semibold">{type === "before_after" ? "Nuovo lavoro prima/dopo" : "Nuovo video"}</p>
+      <p className="font-semibold">{formTitle}</p>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="space-y-1 text-sm">
@@ -156,7 +173,7 @@ function NewItemForm({
         <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} className={input} />
       </label>
 
-      {type === "before_after" ? (
+      {type === "before_after" && (
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="space-y-1 text-sm">
             <span className="text-white/70">Foto prima *</span>
@@ -167,7 +184,16 @@ function NewItemForm({
             <input type="file" accept="image/*" onChange={(e) => setAfter(e.target.files?.[0] ?? null)} className="block w-full text-sm" />
           </label>
         </div>
-      ) : (
+      )}
+
+      {type === "single_image" && (
+        <label className="block space-y-1 text-sm">
+          <span className="text-white/70">Foto *</span>
+          <input type="file" accept="image/*" onChange={(e) => setBefore(e.target.files?.[0] ?? null)} className="block w-full text-sm" />
+        </label>
+      )}
+
+      {type === "video" && (
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="space-y-1 text-sm">
             <span className="text-white/70">Video MP4 (max {MAX_VIDEO_MB} MB) *</span>
@@ -311,6 +337,16 @@ export default function PortfolioManager() {
               </div>
             );
           })}
+        </div>
+      );
+    }
+    if (item.type === "single_image") {
+      const url = publicUrl(item.before_image_path);
+      return url ? (
+        <img src={url} alt={item.title} className="h-28 w-40 rounded-lg object-cover" />
+      ) : (
+        <div className="grid h-28 w-40 place-items-center rounded-lg bg-white/5 text-xs text-white/50">
+          Foto mancante
         </div>
       );
     }

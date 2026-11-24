@@ -1,6 +1,7 @@
 import { Navbar } from "@/components/Navbar";
 import { Hero } from "@/components/Hero";
 import { PortfolioBeforeAfter } from "@/components/PortfolioBeforeAfter";
+import { PhotoGallery } from "@/components/PhotoGallery";
 import { VideoReel } from "@/components/VideoReel";
 import { Footer } from "@/components/Footer";
 import { getPortfolio } from "@/lib/portfolio";
@@ -9,7 +10,7 @@ import { getPortfolio } from "@/lib/portfolio";
 export const revalidate = 60;
 
 export default async function HomePage() {
-  const { beforeAfter, videos } = await getPortfolio();
+  const { beforeAfter, singles, videos } = await getPortfolio();
 
   return (
     <>
@@ -17,6 +18,7 @@ export default async function HomePage() {
       <main id="main">
         <Hero />
         <PortfolioBeforeAfter items={beforeAfter} />
+        <PhotoGallery items={singles} />
         <VideoReel videos={videos} />
       </main>
       <Footer />
