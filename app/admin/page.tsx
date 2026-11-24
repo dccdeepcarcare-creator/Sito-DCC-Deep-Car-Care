@@ -7,6 +7,7 @@ import { VEHICLE_SIZES, formatEuro, type VehicleSize } from "../../lib/catalog";
 import ManualBooking from "./ManualBooking";
 import CatalogEditor from "./CatalogEditor";
 import ClientsSection from "./ClientsSection";
+import PortfolioManager from "./PortfolioManager";
 
 type Tab = "pending" | "confirmed" | "cancelled";
 
@@ -596,7 +597,7 @@ export default function AdminPage() {
   const [ready, setReady] = useState(false);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [tab, setTab] = useState<Tab>("pending");
-  const [section, setSection] = useState<"bookings" | "calendar" | "manual" | "catalog" | "clients">("bookings");
+  const [section, setSection] = useState<"bookings" | "calendar" | "manual" | "catalog" | "clients"| "portfolio">("bookings");
   const [focusId, setFocusId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -700,6 +701,9 @@ export default function AdminPage() {
 </button><button type="button" onClick={() => setSection("clients")} className={btnTab(section === "clients")}>
   Clienti
 </button>
+<button type="button" onClick={() => setSection("portfolio")} className={btnTab(section === "portfolio")}>
+  Portfolio
+</button>
       </div>
 
       {section === "bookings" && (
@@ -730,6 +734,7 @@ export default function AdminPage() {
       {section === "manual" && <ManualBooking onCreated={() => setSection("calendar")} />}
       {section === "catalog" && <CatalogEditor />}
       {section === "clients" && <ClientsSection />}
+      {section === "portfolio" && <PortfolioManager />}
     </main>
   );
 }
